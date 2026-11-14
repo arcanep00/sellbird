@@ -558,6 +558,59 @@ MIGRATIONS: list[str] = [
     ALTER TABLE conversations ADD COLUMN mailbox_id TEXT DEFAULT '';
     CREATE INDEX IF NOT EXISTS idx_outbox_mailbox_sent ON outbox(mailbox_id, status, sent_at);
     """,
+
+    # ── v17: multi-product support ──
+    """
+    CREATE TABLE IF NOT EXISTS products (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        pricing TEXT DEFAULT '',
+        key_benefits_json TEXT DEFAULT '[]',
+        objection_responses_json TEXT DEFAULT '{}',
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS product_icps (
+        id TEXT PRIMARY KEY,
+        product_id TEXT NOT NULL REFERENCES products(id),
+        industries_json TEXT DEFAULT '[]',
+        company_size TEXT DEFAULT '',
+        titles_json TEXT DEFAULT '[]',
+        geography_json TEXT DEFAULT '[]',
+        generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        source TEXT DEFAULT 'manual'
+    );
+
+    ALTER TABLE prospects ADD COLUMN product_id TEXT DEFAULT '';
+    ALTER TABLE campaigns ADD COLUMN product_id TEXT DEFAULT '';
+
+    CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active);
+    CREATE INDEX IF NOT EXISTS idx_product_icps_product ON product_icps(product_id);
+    CREATE INDEX IF NOT EXISTS idx_prospects_product ON prospects(product_id);
+    """,
+
+    # ── v18: AI inference log for local model calls ──
+    """
+    CREATE TABLE IF NOT EXISTS inference_log (
+        id TEXT PRIMARY KEY,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        agent TEXT DEFAULT '',
+        task TEXT DEFAULT '',
+        model TEXT DEFAULT '',
+        provider TEXT DEFAULT 'ollama',
+        prompt_chars INTEGER DEFAULT 0,
+        response_chars INTEGER DEFAULT 0,
+        duration_ms INTEGER DEFAULT 0,
+        is_error INTEGER DEFAULT 0,
+        error_msg TEXT DEFAULT ''
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_inference_log_created ON inference_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_inference_log_task ON inference_log(task);
+    """,
 ]
 
 BRAIN_PROVIDERS = ("claude", "codex")

@@ -1,10 +1,8 @@
 """Brain — Sellbird's thinking engine.
 
-Runs on the operator's Claude subscription (Claude Code headless, the
-default) or, when ``brain.provider: codex`` is configured, their ChatGPT
-subscription through an isolated Codex runtime (see sellbird/codex.py). The
-provider is fixed per Brain; a failing provider never falls back to the
-other one.
+Runs on a local Ollama instance by default (zero cost, fully offline after
+model download). Can also use Claude or Codex subscriptions when configured.
+The provider is fixed per Brain; a failing provider never falls back silently.
 """
 
 import asyncio
@@ -40,7 +38,7 @@ _NON_RETRYABLE_PATTERNS = (
 )
 
 
-PROVIDER_LABELS = {"claude": "Claude", "codex": "Codex"}
+PROVIDER_LABELS = {"claude": "Claude", "codex": "Codex", "ollama": "Ollama"}
 
 # Settings key holding the brain's last health transition, for `sellbird
 # status` and the dashboard: {"provider", "status": "ok"|"paused", "reason",
@@ -66,6 +64,14 @@ def parse_brain_status(raw: str) -> dict:
     except ValueError:
         return {}
     return value if isinstance(value, dict) else {}
+
+
+class _NullQuota:
+    async def within_budget(self, *args, **kwargs):
+        return True
+
+    def invalidate(self):
+        pass
 
 
 def active_brain_status(raw: str, provider: str) -> dict:
@@ -113,25 +119,28 @@ class Brain:
         self.provider = self.config.provider
         self.model = self.config.model
         self.codex = None
-        # Whether the last think_json got no reply at all (an outage, logout,
-        # rate limit or timeout), as opposed to a reply that wasn't valid
-        # JSON. Callers that count model failures must not count outages.
         self.last_reply_empty = False
-        # Codex health (unused for Claude, whose behaviour is unchanged).
         self.unavailable = ""
         self._unavailable_at = 0.0
         self._unavailable_fingerprint = None
         self._usage_limited_until = 0.0
         self._usage_pause_recorded = False
         self._status_synced = False
-        if self.provider == "codex":
+
+        if self.provider == "ollama":
+            from sellbird.hardware import detect, recommend_model
+            if not self.model:
+                hw = detect()
+                self.model = recommend_model(hw)["model"]
+                logger.info(f"Ollama: auto-selected model {self.model} based on hardware")
+            self.quota = _NullQuota()
+        elif self.provider == "codex":
             from sellbird.codex import CodexClient, CodexQuotaClient
             self.codex = CodexClient(
                 model=self.model, reasoning_effort=self.config.reasoning_effort
             )
             self.quota = CodexQuotaClient(self.codex)
         else:
-            # Lazy import avoids a cycle (quota -> usage -> state).
             from sellbird.integrations.quota import QuotaClient
             self.quota = QuotaClient()
 
@@ -153,19 +162,9 @@ class Brain:
         return ""
 
     async def preflight(self) -> str:
-        """Can this Brain be used right now? Returns "" or the reason not.
-
-        Codex only (Claude keeps its existing behaviour): runs the adapter's
-        full pre-prompt check (CodexClient.preflight): CLI version, route and
-        lockdown attested with no login in the runtime, the native login read
-        only (expiry, renewal), then with the access-only copy the configured
-        model against the catalog, the ChatGPT account, and a started
-        tool-less thread. No turn, so no inference; nothing is written to the
-        native login. While paused, the check is repeated only when the login
-        file or the Codex executable changes, or every
-        PROVIDER_RECHECK_SECONDS, so a persistent problem doesn't start
-        runtimes every heartbeat.
-        """
+        """Can this Brain be used right now? Returns "" or the reason not."""
+        if self.provider == "ollama":
+            return await self._ollama_preflight()
         if self.provider != "codex":
             return await self._claude_preflight()
         from sellbird.codex import CodexError
@@ -208,9 +207,7 @@ class Brain:
         return ""
 
     async def _claude_preflight(self) -> str:
-        """Claude: the installed CLI must support every isolation flag
-        (claude_runtime.check_cli). Runs ``claude --help`` only: no login
-        check, no model call. Returns "" or why calls are paused."""
+        """Claude: the installed CLI must support every isolation flag."""
         from sellbird.claude_runtime import ClaudeRuntimeError, check_cli
 
         try:
@@ -218,6 +215,28 @@ class Brain:
         except ClaudeRuntimeError as e:
             await self._mark_unavailable(e)
             return self.unavailable
+        if self.unavailable:
+            await self._mark_available()
+        return ""
+
+    async def _ollama_preflight(self) -> str:
+        """Ollama: check the local server is running and the model exists."""
+        from sellbird.ollama_runtime import OllamaError, check_ollama, model_exists
+
+        try:
+            await asyncio.to_thread(check_ollama)
+        except OllamaError as e:
+            await self._mark_unavailable(e)
+            return self.unavailable
+
+        if self.model and not await asyncio.to_thread(model_exists, self.model):
+            reason = (
+                f"Model '{self.model}' not found in Ollama. "
+                f"Pull it with: ollama pull {self.model}"
+            )
+            await self._mark_unavailable(Exception(reason))
+            return reason
+
         if self.unavailable:
             await self._mark_available()
         return ""
@@ -294,6 +313,10 @@ class Brain:
         if self.transport is not None:
             return await self._think_transport(prompt, expect_json=expect_json,
                                                timeout=timeout, agent=agent, task=task)
+        if self.provider == "ollama":
+            return await self._think_ollama(
+                prompt, timeout=timeout, agent=agent, task=task, expect_json=expect_json
+            )
         if self.provider == "codex":
             return await self._think_codex(
                 prompt, session_id=session_id, timeout=timeout,
@@ -441,6 +464,44 @@ class Brain:
             f"Last error: {str(last_error)[:200]}"
         )
         return ""
+
+    async def _think_ollama(
+        self,
+        prompt: str,
+        timeout: float,
+        agent: str,
+        task: str,
+        expect_json: bool = False,
+    ) -> str:
+        from sellbird.ollama_runtime import OllamaError, call_ollama
+
+        paused = self.paused_reason
+        if paused:
+            logger.debug(f"Ollama call skipped: {paused}")
+            return ""
+
+        logger.debug(f"Brain call via Ollama (model={self.model})")
+        try:
+            response = await call_ollama(
+                prompt=prompt,
+                model=self.model,
+                timeout=timeout,
+                expect_json=expect_json,
+            )
+            try:
+                await self.state.increment_usage()
+            except Exception as e:
+                logger.warning(f"Failed to record usage: {e}")
+            if self.unavailable:
+                await self._mark_available()
+            return response
+        except OllamaError as e:
+            logger.error(f"Ollama call failed: {e}")
+            await self._mark_unavailable(e)
+            return ""
+        except Exception as e:
+            logger.error(f"Ollama unexpected error ({type(e).__name__}): {e}")
+            return ""
 
     async def _think_codex(
         self,

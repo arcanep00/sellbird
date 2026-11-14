@@ -109,6 +109,11 @@ usage:
     end: "07:00"
     timezone: "America/New_York"
 
+brain:
+  provider: "ollama"            # ollama (default, free, local) | claude | codex
+  model: ""                     # leave blank for auto-detection based on your hardware
+  ollama_url: "http://localhost:11434"
+
 # Optional: check each new recipient with Precleared (precleared.dev) before
 # the first cold email: may cold marketing email go to this address under the
 # rules of the recipient's country (UK PECR, US CAN-SPAM, Canada's CASL,

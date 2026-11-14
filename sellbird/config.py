@@ -696,7 +696,7 @@ class UsageConfig(BaseModel):
         return v
 
 
-BRAIN_PROVIDERS = ("claude", "codex")
+BRAIN_PROVIDERS = ("claude", "codex", "ollama")
 CODEX_REASONING_EFFORTS = ("minimal", "low", "medium", "high", "xhigh")
 
 # Model names are passed to a CLI, so they must look like a model name and
@@ -705,17 +705,18 @@ _MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,127}$")
 
 
 class BrainConfig(BaseModel):
-    """Which subscription Sellbird thinks with.
+    """Which provider Sellbird thinks with.
 
-    ``claude`` (default) runs Claude Code headless on your Claude plan.
-    ``codex`` runs Codex on your ChatGPT plan. There is never an automatic
-    fallback between them, and an explicit ``model`` only affects Sellbird —
-    your own Claude Code / Codex settings are never read or changed.
+    ``ollama`` (default for local) runs inference on your machine via Ollama.
+    ``claude`` runs Claude Code headless on your Claude plan.
+    ``codex`` runs Codex on your ChatGPT plan.
+    There is never an automatic fallback between providers.
     """
 
-    provider: str = "claude"
-    model: str = ""  # empty = the provider's own default
+    provider: str = "ollama"
+    model: str = ""  # empty = auto-detected from hardware
     reasoning_effort: str = ""  # codex only; empty = model default
+    ollama_url: str = "http://localhost:11434"  # ollama only
 
     @field_validator("provider", mode="before")
     @classmethod
@@ -833,6 +834,7 @@ class HandoffConfig(BaseModel):
 class SellbirdConfig(BaseModel):
     persona: PersonaConfig
     product: ProductConfig
+    products: list[ProductConfig] = []
     icp: ICPConfig
     channels: ChannelsConfig = ChannelsConfig()
     usage: UsageConfig = UsageConfig()
