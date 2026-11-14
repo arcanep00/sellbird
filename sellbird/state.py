@@ -613,8 +613,8 @@ MIGRATIONS: list[str] = [
     """,
 ]
 
-BRAIN_PROVIDERS = ("claude", "codex")
-_USAGE_LOG_COLUMN = {"claude": "claude_calls", "codex": "codex_calls"}
+BRAIN_PROVIDERS = ("claude", "codex", "ollama")
+_USAGE_LOG_COLUMN = {"claude": "claude_calls", "codex": "codex_calls", "ollama": "claude_calls"}
 
 # When a company was last profiled: the newer of the explicit check stamp
 # (set on every attempt, reachable or not) and its latest profile observation

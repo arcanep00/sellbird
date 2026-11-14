@@ -94,6 +94,17 @@ def recommend_model(hw: dict | None = None) -> dict:
     if hw is None:
         hw = detect()
 
+    from sellbird.ollama_runtime import list_models, _detect_backend
+    backend = _detect_backend()
+    if backend == "lmstudio":
+        models = list_models()
+        if models:
+            return {
+                "model": models[0],
+                "config": "lmstudio",
+                "reason": f"LM Studio detected — using loaded model: {models[0]}",
+            }
+
     ram = hw.get("ram_gb", 0)
     vram = hw.get("gpu_vram_gb", 0)
 

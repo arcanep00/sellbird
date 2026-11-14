@@ -16,13 +16,14 @@ export default function ModelStatus() {
   }
 
   const up = status?.ollama === 'ok'
+  const backend = status?.backend || 'ollama'
 
   return (
     <div style={{ fontSize: 12 }}>
       <div style={{ marginBottom: 6 }}>
         <span className={`status-dot ${up ? 'dot-green' : 'dot-red'}`} />
         <span style={{ color: up ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
-          Ollama {up ? 'running' : 'offline'}
+          {up ? (backend === 'lmstudio' ? 'LM Studio' : 'Ollama') + ' running' : 'AI offline'}
         </span>
       </div>
       {up && status?.recommended_model && (
@@ -36,7 +37,7 @@ export default function ModelStatus() {
       )}
       {!up && (
         <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>
-          Run: <code style={{ background: 'var(--surface2)', padding: '1px 4px', borderRadius: 3 }}>ollama serve</code>
+          Start LM Studio → Local Model API → enable server
         </div>
       )}
     </div>

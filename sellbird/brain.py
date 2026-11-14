@@ -489,7 +489,7 @@ class Brain:
                 expect_json=expect_json,
             )
             try:
-                await self.state.increment_usage()
+                await self.state.increment_usage(provider="ollama")
             except Exception as e:
                 logger.warning(f"Failed to record usage: {e}")
             if self.unavailable:

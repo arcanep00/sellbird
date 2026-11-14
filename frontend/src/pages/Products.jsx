@@ -11,7 +11,11 @@ export default function Products() {
   useEffect(() => {
     fetch('/api/products')
       .then(r => r.json())
-      .then(data => { setProducts(data); if (data.length) setSelected(data[0].id) })
+      .then(data => {
+        const list = Array.isArray(data) ? data : []
+        setProducts(list)
+        if (list.length) setSelected(list[0].id)
+      })
       .catch(() => setError('Could not load products. Make sure the API server is running.'))
   }, [])
 

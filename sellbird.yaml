@@ -1,31 +1,33 @@
 persona:
   name: "Alex"
-  company: "Your Company"
+  company: "Harvey AI"
   role: "Business Development"
-  email: "alex@yourcompany.com"
-  linkedin: "linkedin.com/in/alex-yourcompany"
+  email: "alex@harveyai.com"
+  linkedin: "linkedin.com/in/alex-harveyai"
   tone: "professional, consultative, confident"
 
 product:
-  name: "Your Product"
-  description: "Describe what your product does and who it's for"
-  pricing: "Starting at $X/mo"
+  name: "Harvey Local Sales Agent"
+  description: "An AI-powered sales agent that runs entirely on your local machine. No paid APIs, no cloud inference — just fast, private, offline-capable outreach automation."
+  pricing: "Open source, free to use"
   key_benefits:
-    - "Benefit 1"
-    - "Benefit 2"
-    - "Benefit 3"
+    - "Zero AI inference cost — runs on Ollama or LM Studio locally"
+    - "Complete privacy — all data stays on your machine"
+    - "Works offline after initial setup"
+    - "Multi-product support with product-specific ICP generation"
+    - "Automated prospect scoring and email personalisation"
   objection_responses:
-    "too expensive": "I understand budget is important. Most of our clients see ROI within 30 days..."
-    "already have a solution": "That makes sense. Curious — what's the one thing you wish it did better?"
-    "not interested": "No worries at all. Mind if I ask what your current approach looks like?"
+    "too expensive": "It is completely free and open source. There are no API costs whatsoever."
+    "data privacy": "Everything runs locally on your machine. No data ever leaves your computer."
+    "setup complexity": "Setup takes about 15 minutes. Full instructions are in the README."
   offer:
-    primary: ""                    # Main offer (e.g., "Monthly subscription starting at $99/mo")
-    entry: ""                      # Low-commitment entry (e.g., "14-day free trial", "Free audit")
-    goal: "book_call"              # Goal of outreach: book_call, start_trial, get_reply
-    booking_method: "calendar_link" # calendar_link, suggest_times, ask_preference
-    booking_url: ""                # Calendar link URL (if using calendar_link method)
-    meeting_duration: "15 minutes" # How long the call is
-    meeting_owner: ""              # Who takes the meeting (name or role)
+    primary: "Open source local AI sales agent"
+    entry: "Free setup call to get Harvey running on your machine"
+    goal: "book_call"
+    booking_method: "calendar_link"
+    booking_url: ""
+    meeting_duration: "30 minutes"
+    meeting_owner: "Alex"
 
 icp:
   industries:

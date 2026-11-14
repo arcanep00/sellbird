@@ -25,6 +25,21 @@ def _get_brain_and_state():
         raise HTTPException(status_code=503, detail=f"Could not load config or brain: {e}")
 
 
+async def _get_brain_and_state_async():
+    try:
+        from sellbird.config import load_config
+        from sellbird.state import StateManager
+        from sellbird.brain import Brain
+
+        config = load_config()
+        state = StateManager()
+        await state.init_db()
+        brain = Brain(state, brain_config=config.brain)
+        return brain, state, config
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Could not load config or brain: {e}")
+
+
 class ProspectInput(BaseModel):
     first_name: str = ""
     last_name: str = ""
@@ -57,11 +72,12 @@ class ReplyInput(BaseModel):
 
 @router.get("/health")
 async def health():
-    from sellbird.ollama_runtime import check_ollama, OllamaError
+    from sellbird.ollama_runtime import check_ollama, OllamaError, _detect_backend, list_models
     from sellbird.hardware import detect, recommend_model
 
     ollama_status = "ok"
     ollama_error = ""
+    backend = _detect_backend()
     try:
         check_ollama()
     except OllamaError as e:
@@ -75,6 +91,8 @@ async def health():
         "status": "ok",
         "ollama": ollama_status,
         "ollama_error": ollama_error,
+        "backend": backend,
+        "models": list_models()[:5],
         "hardware": hw,
         "recommended_model": recommendation,
     }
@@ -83,7 +101,7 @@ async def health():
 @router.post("/business-profile")
 async def business_profile(product_id: str | None = None):
     from sellbird.agents.sales_agent import SalesAgent
-    brain, state, config = _get_brain_and_state()
+    brain, state, config = await _get_brain_and_state_async()
     agent = SalesAgent(brain, state, config)
     result = await agent.generate_business_profile(product_id=product_id)
     if result.get("error"):
@@ -94,7 +112,7 @@ async def business_profile(product_id: str | None = None):
 @router.post("/icp")
 async def generate_icp(product_id: str | None = None):
     from sellbird.agents.sales_agent import SalesAgent
-    brain, state, config = _get_brain_and_state()
+    brain, state, config = await _get_brain_and_state_async()
     agent = SalesAgent(brain, state, config)
     result = await agent.generate_icp(product_id=product_id)
     if result.get("error"):
@@ -105,7 +123,7 @@ async def generate_icp(product_id: str | None = None):
 @router.post("/buying-signals")
 async def classify_buying_signals(company: CompanyInput):
     from sellbird.agents.classifier import BuyingSignalClassifier
-    brain, state, config = _get_brain_and_state()
+    brain, state, config = await _get_brain_and_state_async()
     classifier = BuyingSignalClassifier(brain, state, config)
     result = await classifier.classify_signals(company.model_dump())
     return result
@@ -114,7 +132,7 @@ async def classify_buying_signals(company: CompanyInput):
 @router.post("/problem-statement")
 async def generate_problem_statement(prospect: ProspectInput):
     from sellbird.agents.sales_agent import SalesAgent
-    brain, state, config = _get_brain_and_state()
+    brain, state, config = await _get_brain_and_state_async()
     agent = SalesAgent(brain, state, config)
     result = await agent.generate_problem_statement(
         prospect_data=prospect.model_dump(),
@@ -128,7 +146,7 @@ async def generate_problem_statement(prospect: ProspectInput):
 @router.post("/score-prospect")
 async def score_prospect(prospect: ProspectInput):
     from sellbird.agents.sales_agent import SalesAgent
-    brain, state, config = _get_brain_and_state()
+    brain, state, config = await _get_brain_and_state_async()
     agent = SalesAgent(brain, state, config)
     result = await agent.score_prospect(
         prospect_data=prospect.model_dump(),
@@ -140,7 +158,7 @@ async def score_prospect(prospect: ProspectInput):
 @router.post("/generate-email")
 async def generate_email(prospect: ProspectInput):
     from sellbird.agents.sales_agent import SalesAgent
-    brain, state, config = _get_brain_and_state()
+    brain, state, config = await _get_brain_and_state_async()
     agent = SalesAgent(brain, state, config)
     problem = await agent.generate_problem_statement(
         prospect_data=prospect.model_dump(),
@@ -159,7 +177,7 @@ async def generate_email(prospect: ProspectInput):
 @router.post("/classify-reply")
 async def classify_reply(reply: ReplyInput):
     from sellbird.agents.sales_agent import SalesAgent
-    brain, state, config = _get_brain_and_state()
+    brain, state, config = await _get_brain_and_state_async()
     agent = SalesAgent(brain, state, config)
     result = await agent.classify_reply(
         reply_text=reply.reply_text,
@@ -171,7 +189,7 @@ async def classify_reply(reply: ReplyInput):
 @router.post("/research-prospect")
 async def research_prospect(prospect: ProspectInput, company: CompanyInput | None = None):
     from sellbird.agents.classifier import BuyingSignalClassifier
-    brain, state, config = _get_brain_and_state()
+    brain, state, config = await _get_brain_and_state_async()
     classifier = BuyingSignalClassifier(brain, state, config)
     result = await classifier.research_prospect(
         prospect_data=prospect.model_dump(),
@@ -208,9 +226,8 @@ async def list_prospects(status: str | None = None, limit: int = 50):
 @router.post("/score-all-prospects")
 async def score_all_prospects(product_id: str | None = None):
     from sellbird.agents.sales_agent import SalesAgent
-    from sellbird.state import StateManager
 
-    brain, state, config = _get_brain_and_state()
+    brain, state, config = await _get_brain_and_state_async()
     agent = SalesAgent(brain, state, config)
 
     prospects = await state.get_prospects_by_status("new")
@@ -272,7 +289,8 @@ async def list_products():
                 })
         return products
     except Exception as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        logger.warning(f"Could not load products from config: {e}")
+        return []
 
 
 @router.get("/inference-logs")
@@ -321,23 +339,28 @@ async def discover_companies(body: DiscoverInput):
 
 @router.post("/scrape-and-classify")
 async def scrape_and_classify(body: ScrapeInput):
-    from sellbird.collectors.scraper import scrape_company as _scrape
+    from sellbird.collectors.scraper import scrape_company as _scrape, scrape_js_heavy
     from sellbird.agents.classifier import BuyingSignalClassifier
 
-    scraped = await _scrape(body.url)
+    if body.use_playwright:
+        scraped = await scrape_js_heavy(body.url)
+    else:
+        scraped = await _scrape(body.url)
+
     if scraped.get("error"):
         raise HTTPException(status_code=422, detail=scraped["error"])
 
-    brain, state, config = _get_brain_and_state()
+    brain, state, config = await _get_brain_and_state_async()
     classifier = BuyingSignalClassifier(brain, state, config)
 
+    job_list = scraped.get("job_postings") or scraped.get("jobs") or []
     company_data = {
         "name": scraped.get("title", scraped.get("domain", "")),
         "domain": scraped.get("domain", ""),
         "website_text": scraped.get("body_text", ""),
         "job_postings": " | ".join(
             j.get("title", "") if isinstance(j, dict) else str(j)
-            for j in scraped.get("job_postings", [])
+            for j in job_list
         ),
         "tech_stack": [],
         "recent_news": "",

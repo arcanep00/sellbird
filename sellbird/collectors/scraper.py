@@ -267,7 +267,7 @@ async def scrape_js_heavy(url: str) -> dict:
     if not html:
         return {"url": url, "error": "Could not fetch page", "online": False}
     info = extract_company_info(html, url)
-    info["jobs"] = extract_job_postings(html)
+    info["job_postings"] = extract_job_postings(html)
     info["people"] = find_people_on_page(html)
     info["online"] = True
     return info
