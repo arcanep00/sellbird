@@ -287,3 +287,80 @@ async def inference_logs(limit: int = 50):
         ) as cursor:
             rows = await cursor.fetchall()
     return [dict(r) for r in rows]
+
+
+class ScrapeInput(BaseModel):
+    url: str
+    use_playwright: bool = False
+
+
+class DiscoverInput(BaseModel):
+    queries: list[str]
+    max_per_query: int = 10
+
+
+@router.post("/scrape-company")
+async def scrape_company(body: ScrapeInput):
+    if body.use_playwright:
+        from sellbird.collectors.scraper import scrape_js_heavy
+        return await scrape_js_heavy(body.url)
+    from sellbird.collectors.scraper import scrape_company as _scrape
+    return await _scrape(body.url)
+
+
+@router.post("/discover-companies")
+async def discover_companies(body: DiscoverInput):
+    from sellbird.collectors.spider import discover_companies_from_search
+    if not body.queries:
+        raise HTTPException(status_code=400, detail="queries list cannot be empty")
+    results = await discover_companies_from_search(
+        body.queries, max_per_query=body.max_per_query
+    )
+    return {"found": len(results), "companies": results}
+
+
+@router.post("/scrape-and-classify")
+async def scrape_and_classify(body: ScrapeInput):
+    from sellbird.collectors.scraper import scrape_company as _scrape
+    from sellbird.agents.classifier import BuyingSignalClassifier
+
+    scraped = await _scrape(body.url)
+    if scraped.get("error"):
+        raise HTTPException(status_code=422, detail=scraped["error"])
+
+    brain, state, config = _get_brain_and_state()
+    classifier = BuyingSignalClassifier(brain, state, config)
+
+    company_data = {
+        "name": scraped.get("title", scraped.get("domain", "")),
+        "domain": scraped.get("domain", ""),
+        "website_text": scraped.get("body_text", ""),
+        "job_postings": " | ".join(
+            j.get("title", "") if isinstance(j, dict) else str(j)
+            for j in scraped.get("job_postings", [])
+        ),
+        "tech_stack": [],
+        "recent_news": "",
+    }
+
+    signals = await classifier.classify_signals(company_data)
+    return {**scraped, "buying_signals": signals}
+
+
+@router.get("/queue")
+async def queue_status():
+    from sellbird.task_queue import pending, queue_size
+    tasks = await pending()
+    return {"queued": queue_size(), "tasks": tasks[:20]}
+
+
+class QueueTaskInput(BaseModel):
+    task_type: str
+    payload: dict = {}
+
+
+@router.post("/queue")
+async def queue_task(body: QueueTaskInput):
+    from sellbird.task_queue import enqueue
+    task_id = await enqueue(body.task_type, body.payload)
+    return {"queued": True, "task_id": task_id}
