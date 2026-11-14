@@ -14,16 +14,29 @@ def get_ram_gb() -> float:
     try:
         if platform.system() == "Windows":
             out = subprocess.check_output(
-                ["wmic", "computersystem", "get", "TotalPhysicalMemory"],
-                text=True, timeout=5
+                ["powershell", "-Command",
+                 "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"],
+                text=True, timeout=5, stderr=subprocess.DEVNULL
             )
-            for line in out.splitlines():
-                line = line.strip()
-                if line.isdigit():
-                    return int(line) / (1024 ** 3)
+            val = out.strip()
+            if val.isdigit():
+                return int(val) / (1024 ** 3)
     except Exception:
         pass
-    return 0.0
+    try:
+        if platform.system() == "Windows":
+            out = subprocess.check_output(
+                ["wmic", "computersystem", "get", "TotalPhysicalMemory", "/value"],
+                text=True, timeout=5, stderr=subprocess.DEVNULL
+            )
+            for line in out.splitlines():
+                if "TotalPhysicalMemory=" in line:
+                    val = line.split("=", 1)[1].strip()
+                    if val.isdigit():
+                        return int(val) / (1024 ** 3)
+    except Exception:
+        pass
+    return 8.0
 
 
 def get_cpu_cores() -> int:
