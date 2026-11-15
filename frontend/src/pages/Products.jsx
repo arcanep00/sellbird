@@ -19,33 +19,18 @@ export default function Products() {
       .catch(() => setError('Could not load products. Make sure the API server is running.'))
   }, [])
 
-  async function generateProfile() {
-    setLoading(l => ({ ...l, profile: true }))
+  async function generate(type) {
+    setLoading(l => ({ ...l, [type]: true }))
     setError('')
     try {
-      const r = await fetch(`/api/business-profile${selected ? `?product_id=${encodeURIComponent(selected)}` : ''}`, { method: 'POST' })
+      const r = await fetch(`/api/${type === 'profile' ? 'business-profile' : 'icp'}${selected ? `?product_id=${encodeURIComponent(selected)}` : ''}`, { method: 'POST' })
       const data = await r.json()
       if (!r.ok) throw new Error(data.detail || 'Failed')
-      setProfile(data)
+      type === 'profile' ? setProfile(data) : setIcp(data)
     } catch (e) {
       setError(e.message)
     } finally {
-      setLoading(l => ({ ...l, profile: false }))
-    }
-  }
-
-  async function generateIcp() {
-    setLoading(l => ({ ...l, icp: true }))
-    setError('')
-    try {
-      const r = await fetch(`/api/icp${selected ? `?product_id=${encodeURIComponent(selected)}` : ''}`, { method: 'POST' })
-      const data = await r.json()
-      if (!r.ok) throw new Error(data.detail || 'Failed')
-      setIcp(data)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(l => ({ ...l, icp: false }))
+      setLoading(l => ({ ...l, [type]: false }))
     }
   }
 
@@ -53,114 +38,105 @@ export default function Products() {
     <div>
       <div className="page-header">
         <h1>Products</h1>
-        <p>Generate business profiles and ideal customer profiles for each product.</p>
+        <p>Generate business profiles and ideal customer profiles powered by local AI.</p>
       </div>
 
-      {error && <div className="error-msg" style={{ marginBottom: 16 }}>⚠️ {error}</div>}
+      {error && (
+        <div className="card" style={{ borderColor: '#5c1a1a', background: '#130808', marginBottom: 16 }}>
+          <span style={{ color: 'var(--red)', fontSize: 13 }}>{error}</span>
+        </div>
+      )}
 
       <div className="card">
-        <div className="form-group">
-          <label className="form-label">Select Product</label>
+        <div className="form-group" style={{ marginBottom: 16 }}>
+          <label className="form-label">Product</label>
           <select className="form-select" value={selected || ''} onChange={e => setSelected(e.target.value)}>
             {products.map(p => (
-              <option key={p.id} value={p.id}>{p.name} {p.is_primary ? '(primary)' : ''}</option>
+              <option key={p.id} value={p.id}>{p.name}{p.is_primary ? ' (primary)' : ''}</option>
             ))}
           </select>
+          {products.length === 0 && (
+            <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              No products found. Set up your product in <code style={{ background: 'var(--surface2)', padding: '1px 5px', borderRadius: 4 }}>sellbird.yaml</code> under the <code style={{ background: 'var(--surface2)', padding: '1px 5px', borderRadius: 4 }}>product:</code> section.
+            </p>
+          )}
         </div>
 
-        {products.length === 0 && (
-          <p className="muted" style={{ fontSize: 13 }}>
-            No products found. Configure your product in <code>sellbird.yaml</code> under the <code>product:</code> section.
-          </p>
-        )}
-
-        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-          <button className="btn btn-primary" onClick={generateProfile} disabled={loading.profile || !selected}>
-            {loading.profile ? <><span className="spinner" /> Generating...</> : '📋 Generate Business Profile'}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-primary" onClick={() => generate('profile')} disabled={loading.profile || !selected}>
+            {loading.profile ? <><span className="spinner" /> Generating...</> : 'Generate Business Profile'}
           </button>
-          <button className="btn btn-secondary" onClick={generateIcp} disabled={loading.icp || !selected}>
-            {loading.icp ? <><span className="spinner" /> Generating...</> : '🎯 Generate ICP'}
+          <button className="btn btn-secondary" onClick={() => generate('icp')} disabled={loading.icp || !selected}>
+            {loading.icp ? <><span className="spinner" /> Generating...</> : 'Generate ICP'}
           </button>
         </div>
       </div>
 
       {profile && (
         <div className="card">
-          <h2 style={{ marginBottom: 16 }}>Business Profile</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div>
-              <div className="form-label">Company Overview</div>
-              <p style={{ fontSize: 13 }}>{profile.company_overview}</p>
-            </div>
-            <div>
-              <div className="form-label">What We Sell</div>
-              <p style={{ fontSize: 13 }}>{profile.what_we_sell}</p>
-            </div>
-            <div>
-              <div className="form-label">Who We Help</div>
-              <p style={{ fontSize: 13 }}>{profile.who_we_help}</p>
-            </div>
-            <div>
-              <div className="form-label">Value Proposition</div>
-              <p style={{ fontSize: 13, fontWeight: 600 }}>{profile.value_proposition}</p>
-            </div>
-            <div>
-              <div className="form-label">Competitive Advantages</div>
-              <ul style={{ fontSize: 13, paddingLeft: 18 }}>
-                {(profile.competitive_advantages || []).map((a, i) => <li key={i}>{a}</li>)}
-              </ul>
-            </div>
+          <h2 style={{ marginBottom: 18 }}>Business Profile</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {[
+              { label: 'Company Overview', value: profile.company_overview },
+              { label: 'What We Sell', value: profile.what_we_sell },
+              { label: 'Who We Help', value: profile.who_we_help },
+              { label: 'Value Proposition', value: profile.value_proposition, bold: true },
+            ].map(item => item.value && (
+              <div key={item.label}>
+                <div className="form-label">{item.label}</div>
+                <p style={{ fontSize: 13, fontWeight: item.bold ? 600 : 400 }}>{item.value}</p>
+              </div>
+            ))}
+            {profile.competitive_advantages?.length > 0 && (
+              <div>
+                <div className="form-label">Competitive Advantages</div>
+                <ul style={{ fontSize: 13, paddingLeft: 18, marginTop: 4, lineHeight: 1.9 }}>
+                  {profile.competitive_advantages.map((a, i) => <li key={i}>{a}</li>)}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {icp && (
         <div className="card">
-          <h2 style={{ marginBottom: 16 }}>Ideal Customer Profile</h2>
-          <div className="grid-2">
-            <div>
-              <div className="form-label">Target Industries</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                {(icp.industries || []).map((ind, i) => <span key={i} className="tag">{ind}</span>)}
+          <h2 style={{ marginBottom: 18 }}>Ideal Customer Profile</h2>
+          <div className="grid-2" style={{ marginBottom: 16 }}>
+            {[
+              { label: 'Target Industries', items: icp.industries },
+              { label: 'Company Size', items: icp.company_sizes },
+              { label: 'Decision Maker Titles', items: icp.job_titles },
+              { label: 'Geographies', items: icp.geographies },
+            ].map(section => section.items?.length > 0 && (
+              <div key={section.label}>
+                <div className="form-label">{section.label}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {section.items.map((item, i) => <span key={i} className="tag">{item}</span>)}
+                </div>
               </div>
+            ))}
+          </div>
+          <hr className="divider" />
+          {[
+            { label: 'Pain Points', items: icp.pain_points },
+            { label: 'Buying Triggers', items: icp.buying_triggers },
+          ].map(section => section.items?.length > 0 && (
+            <div key={section.label} style={{ marginBottom: 14 }}>
+              <div className="form-label">{section.label}</div>
+              <ul style={{ fontSize: 13, paddingLeft: 18, marginTop: 4, lineHeight: 1.9 }}>
+                {section.items.map((item, i) => <li key={i}>{item}</li>)}
+              </ul>
             </div>
+          ))}
+          {icp.disqualifiers?.length > 0 && (
             <div>
-              <div className="form-label">Company Size</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                {(icp.company_sizes || []).map((s, i) => <span key={i} className="tag">{s}</span>)}
-              </div>
+              <div className="form-label">Disqualifiers</div>
+              <ul style={{ fontSize: 13, paddingLeft: 18, marginTop: 4, lineHeight: 1.9 }}>
+                {icp.disqualifiers.map((d, i) => <li key={i} style={{ color: 'var(--red)' }}>{d}</li>)}
+              </ul>
             </div>
-            <div>
-              <div className="form-label">Decision Maker Titles</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                {(icp.job_titles || []).map((t, i) => <span key={i} className="tag">{t}</span>)}
-              </div>
-            </div>
-            <div>
-              <div className="form-label">Geographies</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                {(icp.geographies || []).map((g, i) => <span key={i} className="tag">{g}</span>)}
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <div className="form-label">Pain Points</div>
-            <ul style={{ fontSize: 13, paddingLeft: 18, marginTop: 6 }}>
-              {(icp.pain_points || []).map((p, i) => <li key={i}>{p}</li>)}
-            </ul>
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <div className="form-label">Buying Triggers</div>
-            <ul style={{ fontSize: 13, paddingLeft: 18, marginTop: 6 }}>
-              {(icp.buying_triggers || []).map((t, i) => <li key={i}>{t}</li>)}
-            </ul>
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <div className="form-label">Disqualifiers</div>
-            <ul style={{ fontSize: 13, paddingLeft: 18, marginTop: 6 }}>
-              {(icp.disqualifiers || []).map((d, i) => <li key={i} style={{ color: 'var(--red)' }}>{d}</li>)}
-            </ul>
-          </div>
+          )}
         </div>
       )}
     </div>

@@ -2,42 +2,45 @@ import React, { useEffect, useState } from 'react'
 
 export default function ModelStatus() {
   const [status, setStatus] = useState(null)
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch('/api/health')
       .then(r => r.json())
-      .then(data => { setStatus(data); setLoading(false) })
-      .catch(() => { setStatus({ ollama: 'unavailable' }); setLoading(false) })
+      .then(setStatus)
+      .catch(() => setStatus({ ollama: 'unavailable' }))
   }, [])
 
-  if (loading) {
-    return <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Checking model...</div>
+  if (!status) {
+    return <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Connecting...</div>
   }
 
   const up = status?.ollama === 'ok'
-  const backend = status?.backend || 'ollama'
+  const backend = status?.backend === 'lmstudio' ? 'LM Studio' : 'Ollama'
 
   return (
     <div style={{ fontSize: 12 }}>
-      <div style={{ marginBottom: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         <span className={`status-dot ${up ? 'dot-green' : 'dot-red'}`} />
         <span style={{ color: up ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
-          {up ? (backend === 'lmstudio' ? 'LM Studio' : 'Ollama') + ' running' : 'AI offline'}
+          {up ? `${backend} running` : 'AI offline'}
         </span>
       </div>
-      {up && status?.recommended_model && (
-        <div style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          <div>Model: <span style={{ color: 'var(--text)' }}>{status.recommended_model.model}</span></div>
-          <div>RAM: {status.hardware?.ram_gb}GB</div>
+      {up && (
+        <div style={{ color: 'var(--text-muted)', lineHeight: 1.7 }}>
+          {status.recommended_model?.model && (
+            <div style={{ color: 'var(--text)', fontSize: 11 }}>
+              {status.recommended_model.model}
+            </div>
+          )}
+          <div>RAM: {status.hardware?.ram_gb} GB</div>
           {status.hardware?.gpu_vram_gb > 0 && (
-            <div>GPU: {status.hardware.gpu_vram_gb}GB VRAM</div>
+            <div>GPU: {status.hardware.gpu_vram_gb} GB VRAM</div>
           )}
         </div>
       )}
       {!up && (
-        <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>
-          Start LM Studio → Local Model API → enable server
+        <div style={{ color: 'var(--text-muted)', fontSize: 11, lineHeight: 1.5 }}>
+          Open LM Studio<br />Local Model API → ON
         </div>
       )}
     </div>
