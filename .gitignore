@@ -61,6 +61,5 @@ harvey.yaml.*
 
 # Frontend
 frontend/node_modules/
-frontend/dist/
 package-lock.json
 frontend/package-lock.json
